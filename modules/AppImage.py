@@ -6,175 +6,155 @@ from other.prg.ISR.models import Cut_VGG19
 from other.prg.ISR.train import Trainer
 from modules.CNNIQAnet import CNNIQAnet
 from other.image_assessment_CNNIQA.IQADataset import NonOverlappingCropPatches
+from skimage import filters
 
 import re
 import torch
 import numpy as np
 import os
+import cv2
+import math
 
 class AppImage():
 
-    APP_IMAGE_FOLDER           = "app_size"
+    #APP_IMAGE_FOLDER           = "app_size"
     APP_IMAGE_UPSCALE_PREDICAT = "upscale_"
-    INITIAL_IMAGE_NAME         = "imgs/empty-avatar.png"
-    IMAGE_DOWNSCALE_PREDICAT   = "downscale_"
-    ALGORITHMS                 = ["noise-cancel", "psnr-small", "psnr-small"]
+    ALGORITHMS                 = ["noise-cancel", "psnr-small", "psnr-large"]
     MODEL                      = "noise-cancel"
-
+    INITIAL_IMAGE_PATH         = "imgs/empty-avatar.png"
     # app_image_width = 300, app_image_height = 300
     def __init__(self, image_path):
-        self.image_path         = image_path
-        img = Image.open(self.image_path)
-        width, height = img.size
-        self.app_image_width                  = width
-        self.app_image_height                 = height
-        self.on_screen_descaled               = False
-        self.upscaled_image_path              = "imgs/empty-avatar.png"
-        # Image after descaling
-        self.descaled_image_path              = "imgs/empty-avatar.png"
-        self.upscaled_descaled_image_path     = "imgs/empty-avatar.png"
+        if(image_path == None):
+            image_path = self.INITIAL_IMAGE_PATH
+        
+        self._image_path                       = image_path
+        img = Image.open(self._image_path)
+        width, height                          = img.size
+        self._app_image_width                  = width
+        self._app_image_height                 = height
 
 
-    # Here can be either -5% image or original image(depends on path it's located in)
-    # Bool type to know for sure if the image we give was indeeed descaled on 5% or it's an original 
-    def upscale(self):
-        if(self.get_on_screen_descaled()):
-            image_name   = self.__get_image_name(self.descaled_image_path)
-            image_folder = self.__get_image_folder(self.descaled_image_path)
-            self.upscaled_descaled_image_path     = self.__run_isr_save_upscaled_image(self.MODEL, self.descaled_image_path, image_folder, image_name)
-            self.upscaled_descaled_image_app_path = self.__resize_and_save_image_path(self.upscaled_descaled_image_path, self.app_image_width, self.app_image_height)
-        else:
-            image_name   = self.__get_image_name(self.image_path)
-            image_folder = self.__get_image_folder(self.image_path)
-            self.upscaled_image_path = self.__run_isr_save_upscaled_image(self.MODEL, self.image_path, image_folder, image_name)
-            self.upscaled_image_app_path = self.__resize_and_save_image_path(self.upscaled_image_path, self.app_image_width, self.app_image_height) 
+    @property
+    def image_path(self):
+        return self._image_path
+
+    @image_path.setter
+    def image_path(self, path):
+        self._image_path = path
+
+    @property
+    def app_image_width(self):
+        img = Image.open(self._image_path)
+        width, height                          = img.size
+        self._app_image_width                  = width
+        return self._app_image_width
+
+    @property
+    def app_image_height(self):
+        img = Image.open(self._image_path)
+        width, height                          = img.size
+        self._app_image_height                 = height
+        return self._app_image_height
+
+
+    def get_entropy(self):
+        #original image
+        img = cv2.imread(self.image_path)
+        # gray color
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        [rows, cols] = img.shape
+        h = 0
+        hist_gray = cv2.calcHist([img],[0],None,[256],[0.0,255.0])
+        # hn valueis not correct
+        hb = np.zeros((256, 1), np.float32)
+        #hn = np.zeros((256, 1), np.float32)
+        for j in range(0, 256):
+            hb[j, 0] = hist_gray[j, 0] / (rows*cols)
+        for i in range(0, 256):
+            if hb[i, 0] > 0:
+                h = h - (hb[i, 0])*math.log(hb[i, 0],2)
+                    
+        out = h
+        return round(out, 3)
+
+
+    def get_sharpness_brenner(self):
+        '''
+        :param img:narray             the clearer the image,the larger the return value
+        :return: float 
+        '''
+        #original image
+        img = cv2.imread(self.image_path)
+        # gray color
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        shape = np.shape(img)
+        out = 0
+        for y in range(0, shape[1]):
+            for x in range(0, shape[0]-2):
+                
+                out+=(int(img[x+2,y])-int(img[x,y]))**2
+                
+        return round(out) 
+
+
+    def get_varience(self):
+        #original image
+        img = cv2.imread(self.image_path)
+        # gray color
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        out = 0
+        u = np.mean(img)
+        shape = np.shape(img)
+        for y in range(0,shape[1]):
+            for x in range(0,shape[0]):
+                out+=(img[x,y]-u)**2
+        return round(out)
+
+
+    def get_histogram(self):
+        src = cv2.imread(cv2.samples.findFile(self.image_path))
+        if src is None:
+            print('Could not open or find the image:', img_path)
+            exit(0)
+        bgr_planes = cv2.split(src)
+        histSize = 256
+        histRange = (0, 256) # the upper boundary is exclusive
+        accumulate = False
+        b_hist = cv2.calcHist(bgr_planes, [0], None, [histSize], histRange, accumulate=accumulate)
+        g_hist = cv2.calcHist(bgr_planes, [1], None, [histSize], histRange, accumulate=accumulate)
+        r_hist = cv2.calcHist(bgr_planes, [2], None, [histSize], histRange, accumulate=accumulate)
+        hist_w = 512
+        hist_h = 400
+        bin_w = int(round( hist_w/histSize ))
+        histImage = np.zeros((hist_h, hist_w, 3), dtype=np.uint8)
+        cv2.normalize(b_hist, b_hist, alpha=0, beta=hist_h, norm_type=cv2.NORM_MINMAX)
+        cv2.normalize(g_hist, g_hist, alpha=0, beta=hist_h, norm_type=cv2.NORM_MINMAX)
+        cv2.normalize(r_hist, r_hist, alpha=0, beta=hist_h, norm_type=cv2.NORM_MINMAX)
+        for i in range(1, histSize):
+            cv2.line(histImage, ( bin_w*(i-1), hist_h - int(b_hist[i-1]) ),
+                    ( bin_w*(i), hist_h - int(b_hist[i]) ),
+                    ( 255, 0, 0), thickness=2)
+            cv2.line(histImage, ( bin_w*(i-1), hist_h - int(g_hist[i-1]) ),
+                    ( bin_w*(i), hist_h - int(g_hist[i]) ),
+                    ( 0, 255, 0), thickness=2)
+            cv2.line(histImage, ( bin_w*(i-1), hist_h - int(r_hist[i-1]) ),
+                    ( bin_w*(i), hist_h - int(r_hist[i]) ),
+                    ( 0, 0, 255), thickness=2)
+        return histImage
         
 
-    def downscale_minus_5(self):
-        if(self.descaled_image_path == self.INITIAL_IMAGE_NAME):
-            image_name   = self.__get_image_name(self.image_path)
-            image_folder = self.__get_image_folder(self.image_path)
-            coef         = 0.95
-            self.descaled_image_path         = self.__descale_imgs_coef(self.image_path, image_folder, image_name, coef)
-            self.descaled_image_app_path     = self.__resize_and_save_image_path(self.descaled_image_path, self.app_image_width, self.app_image_height) 
-        self.set_on_screen_descaled(True)
-
-
-    def is_upscaled(self):
-        if (self.upscaled_image_path == self.INITIAL_IMAGE_NAME):
-            return False
-        else:
-            return True
-
-   
-    def set_on_screen_descaled(self, is_descaled):
-        self.on_screen_descaled = is_descaled
-
-
-    def get_on_screen_descaled(self):
-        return self.on_screen_descaled
-
-
-    def get_image_path(self):
-        return self.image_path
-
-
-    def get_upscaled_image_path(self):
-        if(self.is_upscaled()):
-            return self.upscaled_image_path
-        else:
-            return None
-
-
-    def get_app_image_width(self):
-        return self.app_image_width
-
-
-    def get_app_image_height(self):
-        return self.app_image_height
-
-
-    # Images for showing in the app
-    def get_image_app_path(self):
-        return self.image_app_path
-
-
-    def get_upscaled_image_app_path(self):
-        return self.upscaled_image_app_path
-
-
-    def get_descaled_image_app_path(self):
-        return self.descaled_image_app_path
-
-
-    def get_upscaled_descaled_image_app_path(self):
-        return self.upscaled_descaled_image_app_path
-
-
-    # Real images
-    def get_image_path(self):
-        return self.image_path
-
-
-    def get_upscaled_image_path(self):
-        return self.upscaled_image_path
-
-
-    def get_descaled_image_path(self):
-        return self.descaled_image_path
-
-
-    def get_upscaled_descaled_image_path(self):
-        return self.upscaled_descaled_image_path
-
-
-    def assess_image(self, image_path):
-        if image_path == self.INITIAL_IMAGE_NAME:
-            return "?.??"
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = CNNIQAnet(ker_size=7,
-                        n_kers=50,
-                        n1_nodes=800,
-                        n2_nodes=800).to(device)
-
-        model.load_state_dict(torch.load("other/image_assessment_CNNIQA/models/CNNIQA-LIVE"))
-
-        im = Image.open(image_path).convert('L')
-        patches = NonOverlappingCropPatches(im, 32, 32)
-
-        model.eval()
-        with torch.no_grad():
-            patch_scores = model(torch.stack(patches).to(device))
-            score        = str(50. - model(torch.stack(patches).to(device)).mean())
-            score  = re.findall("\d+\.\d+", score)[0]
-            return score
-
-    
-    def __get_image_name(self, image_path):
+    def _get_image_name(self, image_path):
         return image_path.split("/")[-1]
 
 
-    def __get_image_folder(self, image_path):
-        return image_path.split(self.__get_image_name(image_path))[0]
+    def _get_image_folder(self, image_path):
+        return image_path.split(self._get_image_name(image_path))[0]
 
 
-    def __descale_imgs_coef(self, image_path, image_folder, image_name,  coef):
-        img = Image.open(image_path)
-        width, height = img.size
-        new_width     = int(width * coef)
-        new_height    = int(height * coef)
-        new_size      = (new_width, new_height)
-        new_img       = img.resize(new_size)
-
-        descaled_image_path = image_folder + "/" + self.IMAGE_DOWNSCALE_PREDICAT + image_name
-        descaled_image_path.encode('unicode_escape')
-        new_img.save(descaled_image_path)
-        return descaled_image_path
-
-
-    def __resize_and_save_image_path(self, image_path, app_image_width, app_image_height):
-        image_folder = self.__get_image_folder(image_path)
-        image_name   = self.__get_image_name(image_path)
+    '''def __resize_and_save_image_path(self, image_path, app_image_width, app_image_height):
+        image_folder = self._get_image_folder(image_path)
+        image_name   = self._get_image_name(image_path)
         img = Image.open(image_path)
         width, height = img.size
 
@@ -209,31 +189,52 @@ class AppImage():
         print(image_app_path)
         app_img.save(image_app_path)
 
-        return image_app_path
+        return image_app_path'''
 
+
+    
+class OriginalAppImage(AppImage):
+    INITIAL_IMAGE_PATH         = "imgs/empty-avatar.png"
+
+    def __init__(self, image_path=None):
+        super().__init__(image_path)
+        self._upscaled_app_image = UpscaledAppImage()
+        self.is_upscaled        = False
+
+
+    @property
+    def upscaled_app_image(self):
+        return self._upscaled_app_image
+
+
+    def upscale(self, algorithm_name):
+        image_name   = self._get_image_name(self.image_path)
+        image_folder = self._get_image_folder(self.image_path)
+        result_image = self.__run_isr(algorithm_name, self.image_path, image_folder, image_name)
+        upscaled_image_path = image_folder + "/" + self.APP_IMAGE_UPSCALE_PREDICAT + image_name
+        
+        self._upscaled_app_image.image_path = upscaled_image_path
+        upscaled_image_path.encode('unicode_escape')
+        result_image.save(upscaled_image_path)
+        self.is_upscaled = True
 
     # available models: psnr-large, psnr-small, noise-cancel
-    def __run_isr_save_upscaled_image(self, model, image_path, image_folder, image_name):
+    def __run_isr(self, model, image_path, image_folder, image_name):
         img     = Image.open(image_path)
         lr_img  = np.array(img)
         rdn     = RDN(weights=model)
         sr_img  = rdn.predict(lr_img)
-        self.result_img = Image.fromarray(sr_img)
-        
-        upscaled_image_path = image_folder + "/" + self.APP_IMAGE_UPSCALE_PREDICAT + image_name
-        upscaled_image_path.encode('unicode_escape')
-        self.result_img.save(upscaled_image_path)
-        
-        return upscaled_image_path
+        result_img = Image.fromarray(sr_img)
+        return result_img
 
 
+    def is_upscaled(self):
+        return self.is_upscaled
 
-class OriginaAppImage(AppImage):
-    
-    def __init__():
-        pass
+
 
 class UpscaledAppImage(AppImage):
     
-    def __init__():
-        pass
+    def __init__(self, image_path=None):
+        super().__init__(image_path)
+

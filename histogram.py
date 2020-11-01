@@ -10,7 +10,7 @@ img_path = "imgs/black_hole.jpg"
 args = parser.parse_args()
 src = cv.imread(cv.samples.findFile(img_path))
 if src is None:
-    print('Could not open or find the image:', args.input)
+    print('Could not open or find the image:', img_path)
     exit(0)
 bgr_planes = cv.split(src)
 histSize = 256
