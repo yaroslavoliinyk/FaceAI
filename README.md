@@ -25,3 +25,5 @@ That is my Master Thesis, which enhances the quality of your photo. You can esti
 ![9](https://user-images.githubusercontent.com/52013296/145690925-1e789c5b-0213-4b8c-b37b-c18e86daeb51.png)
 
 ![10](https://user-images.githubusercontent.com/52013296/145690928-eb2cf17f-8790-4963-9cb4-ae0d0878ed70.png)
+
+In case of any questions, please don't hesitate to email me: yaroslav.oliinyk@icloud.com
